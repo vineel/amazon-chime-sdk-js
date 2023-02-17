@@ -1673,6 +1673,7 @@ export class DemoMeetingApp
     }
   }
 
+  //vs init
   async initializeMeetingSession(configuration: MeetingSessionConfiguration): Promise<void> {
     const consoleLogger = (this.meetingLogger = new ConsoleLogger('SDK', this.logLevel));
     if (this.isLocalHost()) {
@@ -1724,7 +1725,7 @@ export class DemoMeetingApp
     if ((document.getElementById('pause-last-frame') as HTMLInputElement).checked) {
       configuration.keepLastFrameWhenPaused = true;
     }
-
+    //vs
     this.meetingSession = new DefaultMeetingSession(
         configuration,
         this.meetingLogger,
@@ -1749,15 +1750,17 @@ export class DemoMeetingApp
       this.meetingSession.audioVideo.setContentAudioProfile(AudioProfile.fullbandMusicStereo());
       this.log('Using audio profile fullband-music-stereo-quality');
     }
+    //vs
     this.audioVideo = this.meetingSession.audioVideo;
     this.audioVideo.addDeviceChangeObserver(this);
+    
     this.setupDeviceLabelTrigger();
     this.setupMuteHandler();
     this.setupCanUnmuteHandler();
     this.setupSubscribeToAttendeeIdPresenceHandler();
     this.setupDataMessage();
     this.setupLiveTranscription();
-    this.audioVideo.addObserver(this);
+    this.audioVideo.addObserver(this); // is there a reason this is so far down this list?
     this.meetingSession.eventController.addObserver(this);
     this.audioVideo.addContentShareObserver(this);
     if (this.videoCodecPreferences !== undefined && this.videoCodecPreferences.length > 0) {
@@ -2880,7 +2883,10 @@ export class DemoMeetingApp
     this.selectedVideoInput = selection;
     this.log(`Switching to: ${this.selectedVideoInput}`);
     const device = await this.videoInputSelectionToDevice(this.selectedVideoInput);
+
     if (device === null) {
+      //vs Why would device === null?
+      console.log("!!!!!! selectedVideoInput: device===null");
       try {
         await this.audioVideo.stopVideoInput();
       } catch (e) {
@@ -2893,6 +2899,7 @@ export class DemoMeetingApp
         await this.audioVideo.stopVideoPreviewForVideoInput(videoPreviewEl);
       }
     } else {
+      //vs this makes more sense. ready to start video with new transformDevice (or not transformed device)
       try {
         await this.audioVideo.startVideoInput(device);
       } catch (e) {
@@ -3046,13 +3053,13 @@ export class DemoMeetingApp
   }
 
   private videoInputSelectionToIntrinsicDevice(value: string): Device {
-    if (value === 'Blue') {
-      return SyntheticVideoDeviceFactory.create('blue');
-    }
+    // if (value === 'Blue') {
+    //   return SyntheticVideoDeviceFactory.create('blue');
+    // }
 
-    if (value === 'SMPTE Color Bars') {
-      return SyntheticVideoDeviceFactory.create('smpte');
-    }
+    // if (value === 'SMPTE Color Bars') {
+    //   return SyntheticVideoDeviceFactory.create('smpte');
+    // }
 
     return value;
   }
@@ -3080,16 +3087,18 @@ export class DemoMeetingApp
       return new ResizeProcessor(0.5625);  // 16/9 Aspect Ratio
     }
 
+    //vs
     if (videoFilter.startsWith('Background Blur')) {
       // In the event that frames start being dropped we should take some action to remove the background blur.
-      this.blurObserver = {
-        filterFrameDurationHigh: (event) => {
-          this.log(`background filter duration high: framed dropped - ${event.framesDropped}, avg - ${event.avgFilterDurationMillis} ms, frame rate - ${event.framerate}, period - ${event.periodMillis} ms`);
-        },
-        filterCPUUtilizationHigh: (event) => {
-          this.log(`background filter CPU utilization high: ${event.cpuUtilization}%`);
-        }
-      };
+      //vs
+      // this.blurObserver = {
+      //   filterFrameDurationHigh: (event) => {
+      //     this.log(`background filter duration high: framed dropped - ${event.framesDropped}, avg - ${event.avgFilterDurationMillis} ms, frame rate - ${event.framerate}, period - ${event.periodMillis} ms`);
+      //   },
+      //   filterCPUUtilizationHigh: (event) => {
+      //     this.log(`background filter CPU utilization high: ${event.cpuUtilization}%`);
+      //   }
+      // };
 
       const cpuUtilization: number = Number(videoFilter.match(/([0-9]{2})%/)[1]);
       this.blurProcessor = await BackgroundBlurVideoFrameProcessor.create(this.getBackgroundBlurSpec(), { filterCPUUtilization: cpuUtilization });
@@ -3113,38 +3122,112 @@ export class DemoMeetingApp
     return null;
   }
 
+  /*
+  //vs
+    videoInputSelectionWithOptionalFilter gets called
+      1. when you start video
+      2. when you switch video inputs
+      3. when you turn on a filter
+      4. switch filters
+      5. turn off all filters
+
+        * when you start video (innerDevice= 9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: None
+
+        * when you choose your first filter (resize)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: return new transformDevice: DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}        * you change to another filter
+
+        * when you select a 2nd filter (blur 40%)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: STOP old device
+            !!!!!! videoInputSelectionWithOptionalFilter: return new transformDevice: DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}
+
+        * when you select a 3rd filter (replacement)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: STOP old device
+            !!!!!! videoInputSelectionWithOptionalFilter: return new transformDevice: DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}
+
+        * when you select the same filter (replacement)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter:2 already have a filter chosen
+            !!!!!! videoInputSelectionWithOptionalFilter:2 DONE: this.chosenVideoTransformDevice= DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}
+
+        * when you select a different filter again (blur 10)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: STOP old device
+            !!!!!! videoInputSelectionWithOptionalFilter: return new transformDevice: DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}
+
+        * when you select a variant of the current fitler (blur 40)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: STOP old device
+            !!!!!! videoInputSelectionWithOptionalFilter: return new transformDevice: DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}
+        
+        * when you deselect all filters (NONE)
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: None
+        
+
+        * When you are running one video input with NO filter and switch inputs,
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter: None
+
+        * When you are running one video input with Blur and switch inputs
+            !!!!!! videoInputSelectionWithOptionalFilter:
+            !!!!!! videoInputSelectionWithOptionalFilter:2 already have a filter chosen
+            !!!!!! videoInputSelectionWithOptionalFilter:2 not the same as the older filter so choose new inner device
+            !!!!!! videoInputSelectionWithOptionalFilter:2 DONE: this.chosenVideoTransformDevice= DefaultVideoTransformDevice {logger: ConsoleLogger, device: '9dc9d9930d640e149922d527a0dc19a7033470e33cc30259c4be4803ca256a21', processors: Array(1), browserBehavior: DefaultBrowserBehavior, observers: Set(0), …}
+
+        * NOT when you stop video
+
+  */
+ //vs
   private async videoInputSelectionWithOptionalFilter(
       innerDevice: Device
   ): Promise<VideoInputDevice> {
+    console.log("!!!!!! videoInputSelectionWithOptionalFilter:");
+    
     if (this.selectedVideoFilterItem === 'None') {
+      console.log("!!!!!! videoInputSelectionWithOptionalFilter: None");
       return innerDevice;
     }
-
+    
+    //vs1
     if (
-        this.chosenVideoTransformDevice &&
-        this.selectedVideoFilterItem === this.chosenVideoFilter
-    ) {
-      if (this.chosenVideoTransformDevice.getInnerDevice() !== innerDevice) {
-        // switching device
-        this.chosenVideoTransformDevice = this.chosenVideoTransformDevice.chooseNewInnerDevice(
+      this.chosenVideoTransformDevice &&
+      this.selectedVideoFilterItem === this.chosenVideoFilter
+      ) {
+        console.log("!!!!!! videoInputSelectionWithOptionalFilter:2 already have a filter chosen");
+        if (this.chosenVideoTransformDevice.getInnerDevice() !== innerDevice) {
+          console.log("!!!!!! videoInputSelectionWithOptionalFilter:2 Same filter, but you switched video inputs");
+          // switching device
+          this.chosenVideoTransformDevice = this.chosenVideoTransformDevice.chooseNewInnerDevice(
             innerDevice
-        );
-      }
-      return this.chosenVideoTransformDevice;
-    }
-
-    // A different processor is selected then we need to discard old one and recreate
-    if (this.chosenVideoTransformDevice) {
+            );
+          }
+          console.log("!!!!!! videoInputSelectionWithOptionalFilter:2 DONE: this.chosenVideoTransformDevice=", this.chosenVideoTransformDevice);
+          return this.chosenVideoTransformDevice;
+        }
+        
+        // A different processor is selected then we need to discard old one and recreate
+        if (this.chosenVideoTransformDevice) {
+      console.log("!!!!!! videoInputSelectionWithOptionalFilter: STOP old device");
       await this.chosenVideoTransformDevice.stop();
     }
 
     const proc = await this.videoFilterToProcessor(this.selectedVideoFilterItem);
-    this.chosenVideoFilter = this.selectedVideoFilterItem;
+    this.chosenVideoFilter = this.selectedVideoFilterItem; // this is just the text of the menu choice
+
+    // create new device with processor for filter
     this.chosenVideoTransformDevice = new DefaultVideoTransformDevice(
         this.meetingLogger,
         innerDevice,
         [proc]
     );
+
+    // return the new device
+    console.log("!!!!!! videoInputSelectionWithOptionalFilter: return new transformDevice:", this.chosenVideoTransformDevice);
     return this.chosenVideoTransformDevice;
   }
 
@@ -3152,6 +3235,7 @@ export class DemoMeetingApp
     if (this.isRecorder() || this.isBroadcaster() || value === 'None' || value === null) {
       return null;
     }
+    //vs2
     const intrinsicDevice = this.videoInputSelectionToIntrinsicDevice(value);
     return await this.videoInputSelectionWithOptionalFilter(intrinsicDevice);
   }
